@@ -55,9 +55,6 @@ if __name__ == "__main__":
     
   owner = OWNER(provers)
   
-  for p in provers:
-    print(p)
-
   aggregators = []
 
   for agg in range(a):
@@ -68,9 +65,9 @@ if __name__ == "__main__":
   # Print out the tree hierarchy of aggregators
   print("\nHierarchy Tree:")
   print_tree(aggregators[0])  # Start from the root aggregator (aggregators[0])
-'''
+
   verifier = VERIFIER(owner, aggregators)
   verifier.tokenReq()
-
+'''
   verifier.Attestation(aggregators[0])
 '''

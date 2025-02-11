@@ -51,7 +51,9 @@ class VERIFIER:
             
     
     def Dec(self, e):
-        token_json = pow(self.sk_v, e, PRIME)
+        decrypted_token_int = pow(e, self.sk_v, PRIME)
+        
+        token_json = self.int_to_str(decrypted_token_int)
         
         T = json.loads(token_json)
         
@@ -95,6 +97,11 @@ class VERIFIER:
         else:
             print("Network not trustworthy. Learning identity and configuration of all bad devices. End of protocol.")
             
+            
+    def int_to_str(i):
+        length = (i.bit_length() + 7) // 8
+        
+        return i.to_bytes(length, 'big').decode('utf-8')
     
     def Verify(self, apk, alpha_1, M):
         Beta = None
