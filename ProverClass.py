@@ -1,7 +1,6 @@
-from DeviceClass import DEVICE
 import hashlib
 
-PRIME = 23
+PRIME = 7 #23
 
 class PROVER:
     def __init__(self, id):

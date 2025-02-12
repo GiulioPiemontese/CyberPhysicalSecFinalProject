@@ -4,10 +4,13 @@ import math
 import hashlib
 import time
 import json
+from Crypto.PublicKey import RSA
+from Crypto.Signature import pkcs1_15
+from Crypto.Hash import SHA256
 
 ########## OWNER ##########
 
-PRIME = 23
+PRIME = 7 #23
 
 class OWNER:
   def __init__(self, provers):
@@ -19,9 +22,14 @@ class OWNER:
     
     print(self.g1, self.g2, self.g3)
 
-    # sk_o and pk_o generation
-    self.sk_o = random.randint(1, PRIME - 1)
-    self.pk_o = pow(self.g2, self.sk_o, PRIME)
+    # Generate RSA Key Pair (in variables)
+    key = RSA.generate(2048)
+    private_key = key.export_key()
+    public_key = key.publickey().export_key()
+
+    # Import keys directly from variables
+    self.sk_o = RSA.import_key(private_key)
+    self.pk_o = RSA.import_key(public_key)
     
     # Generation of key pairs (sk_i, pk_i) for each prover
     sk = [] # sk are just integers of group mod p
@@ -47,7 +55,7 @@ class OWNER:
     certificates = []
     
     for k in self.pk:
-      certificates.append(self.generate_cert(k))
+      certificates.append(k)
       
     for p, k, c in zip(provers, key_pairs, certificates):
       p.receive_trust_env(k, c)
@@ -56,24 +64,26 @@ class OWNER:
 
     
   def generate_cert(self, pk):
-    cert = pk
+    cert = self.pk_o.export_key()
     
     return cert
   
   def all_generators(self, p):
     if not isprime(p):
-        raise ValueError("p must be a prime number.")
-    
+      raise ValueError("p must be a prime number.")
+        
+    # Set of all elements coprime with p
     required_set = {num for num in range(1, p) if math.gcd(num, p) == 1}
     generators = []
-    
+        
     for g in range(1, p):
-        generated = {pow(g, power, p) for power in range(1, p)}
-        if generated == required_set:
-            generators.append(g)
+      # Generate the set of powers of g modulo p
+      generated = {pow(g, power, p) for power in range(1, p)}
+      if generated == required_set:
+        generators.append(g)
         
     return generators
-  
+    
   def getFreeCounter(self):
     tuple = random.choice(list(self.counters.items()))  # should be picked the free one
     cl, vl = tuple
@@ -95,8 +105,7 @@ class OWNER:
     check = self.checkPolicy(delta_t)
     
     # Verify the signature
-    expected_hash = hashlib.sha256(f"{self.no_callenge}{delta_t}".encode()).hexdigest()
-    verified = sigma_v == pow(int(expected_hash, 16), cert_pk_v, PRIME) # pow(sigma_v, cert_pk_v, PRIME) == int(expected_hash, 16)
+    verified = self.verify_signature(sigma_v, self.no_callenge, delta_t, cert_pk_v)
     
     if verified and check:
       token = self.generate_token()
@@ -107,19 +116,40 @@ class OWNER:
       print("Error during token generation. Abort process.")
       return 0
       
-    e = self.Enc(token, cert_pk_v)
-    
+    # e = self.Enc(token, cert_pk_v) #TODO: in questo momento e contiene il token in plaintext
+    e = token #TODO per il momento, non sapendo come avviene cifratura e decifratura lo lascio così
     # apk (aggregate public key) is the product of all the pk_i
     self.apk = 1
     for k in self.pk:
       self.apk = (k * self.apk) % PRIME
     
-    msg = f"{self.N_v}{self.apk}"
+    msg = f"{self.N_v}{self.apk}".encode()
     
     sigma_2 = self.Sign(msg)
         
     return e, self.apk, sigma_2, self.generate_cert(self.pk_o)
   
+  
+  def verify_signature(self, sigma_v, no_challenge, delta_t, cert_pk_v):
+    """Verifies the signature"""
+    try:
+      # Construct the message from no_challenge and delta_t
+      message = f"{no_challenge}{delta_t}".encode()
+
+      # Hash the message
+      hashed_msg = SHA256.new(message)
+
+      # Import the provided public key for verification
+      cert_public_key = RSA.import_key(cert_pk_v)
+
+      # Verify the signature
+      pkcs1_15.new(cert_public_key).verify(hashed_msg, sigma_v)
+              
+      return True  # Signature is valid
+    except (ValueError, TypeError):
+      return False  # Signature verification failed
+            
+
   def Enc(self, token, pk_v):
     token_json = json.dumps(token)
     
@@ -127,13 +157,6 @@ class OWNER:
     
     return pow(token_int, pk_v, PRIME)
   
-  def str_to_int(self, s):
-      if isinstance(s, str):  
-          return int.from_bytes(s.encode('utf-8'), 'big')  # Convert string to integer
-      elif isinstance(s, int):
-          return s  # It's already an integer, return as is
-      else:
-          raise TypeError("Input must be a string or an integer")
         
   def checkPolicy(self, delta_t):
     check = delta_t <= 3600  # Token valid for less than 1 hour
@@ -154,21 +177,22 @@ class OWNER:
     
     # Concatenate h_g, c_l, v_l, and t_exp as a single message
     message = f"{h_g}{c_l}{v_l}{t_exp}".encode()
-    
-    # Hash the message
-    message_hash = int(hashlib.sha256(message).hexdigest(), 16)
-    
+        
     # Sign the hash using the owner's private key (modular arithmetic as an example)
-    sigma_1 = self.Sign(message_hash)
+    sigma_1 = self.Sign(message)
     
     token = dict(H=H, c_l=c_l, v_l=v_l, t_exp=t_exp, sigma_1=sigma_1)
     
     return token
   
   def Sign(self, msg):
-    msg_int = self.str_to_int(msg)
-    
-    return pow(msg_int, self.sk_o, PRIME)
+    # Hash the message
+    hashed_msg = SHA256.new(msg)
+
+    # Sign the message
+    signature = pkcs1_15.new(self.sk_o).sign(hashed_msg)
+        
+    return signature            
     
   def getGoodConfigs(self):
     configs = ["conf1", "conf2", "conf3"]

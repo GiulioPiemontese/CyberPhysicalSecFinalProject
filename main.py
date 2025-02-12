@@ -68,6 +68,6 @@ if __name__ == "__main__":
 
   verifier = VERIFIER(owner, aggregators)
   verifier.tokenReq()
-'''
+
   verifier.Attestation(aggregators[0])
-'''
+

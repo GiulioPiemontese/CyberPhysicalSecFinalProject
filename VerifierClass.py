@@ -1,16 +1,25 @@
-from DeviceClass import DEVICE
 import random
 import hashlib
 import json
+from Crypto.PublicKey import RSA
+from Crypto.Signature import pkcs1_15
+from Crypto.Hash import SHA256
 
-PRIME = 23
+PRIME = 7 #23
 
 class VERIFIER:
     def __init__(self, owner, aggregators):
+        # Generate RSA Key Pair (in variables)
+        key = RSA.generate(2048)
+        private_key = key.export_key()
+        public_key = key.publickey().export_key()
+
+        # Import keys directly from variables
+        self.sk_v = RSA.import_key(private_key)
+        self.pk_v = RSA.import_key(public_key)
+
         self.id = random.randint(1, PRIME)
         self.delta_t = 3600         # max expiration time
-        self.sk_v = random.randint(1, PRIME - 1)
-        self.pk_v = pow(owner.g2, self.sk_v, PRIME)
         self.aggregators = aggregators
         self.owner = owner
         
@@ -20,53 +29,68 @@ class VERIFIER:
         
         no_challenge = self.owner.get_nonce(self.N_v)
         
-        sigma_v = self.create_signature(no_challenge)
+        sigma_v = self.Sign(no_challenge)
         
-        cert_pk_v = self.pk_v   # TODO don't know how to calculate it
+        cert_pk_v = self.pk_v.export_key()
         
         e, apk, sigma_2, cert_pk_o = self.owner.tokenReq(sigma_v, self.delta_t, cert_pk_v)
         
-        msg = f"{self.N_v}{apk}"
+        msg = f"{self.N_v}{apk}".encode()
         
         if self.Verify_sig(cert_pk_o, msg, sigma_2):
             
-            T = self.Dec(e)
-            h_g = T["h_g"]
+            # T = self.Dec(e) AL MOMENTO SALTO LA CIFRATURA E DECIFRATURA
+            T = e
+            h_g = hashlib.sha256("".join(T["H"]).encode()).hexdigest()
             c_l = T["c_l"]
             v_l = T["v_l"]
             t_exp = T["t_exp"]
             sigma_1 = T["sigma_1"]
             
-            msg1 = f"{h_g}{c_l}{v_l}{t_exp}"
+            msg1 = f"{h_g}{c_l}{v_l}{t_exp}".encode()
             
             if self.Verify_sig(cert_pk_o, msg1, sigma_1):
                 self.T_apk = dict(T=T, apk=apk)         # store(T, apk)
         
     
-    def create_signature(self, no_challenge):
-        signature = hashlib.sha256(f"{no_challenge}{self.delta_t}".encode()).hexdigest()
-        sigma_v = pow(int(signature, 16), self.pk_v, PRIME)
+    def Sign(self, no_challenge):
+        # Message to sign
+        message = f"{no_challenge}{self.delta_t}".encode()
+
+        # Hash the message
+        hashed_msg = SHA256.new(message)
+
+        # Sign the message
+        signature = pkcs1_15.new(self.sk_v).sign(hashed_msg)
         
-        return sigma_v
-            
+        return signature
+    
     
     def Dec(self, e):
-        decrypted_token_int = pow(e, self.sk_v, PRIME)
+        decrypted_token_int = pow(e, self.sk_v, PRIME) #TODO a quanto pare questo modo di cifrare e decifrare non funziona
         
-        token_json = self.int_to_str(decrypted_token_int) #TODO: error saying that 2 args were given but expected 1
+        token_json = self.int_to_str(decrypted_token_int)
         
         T = json.loads(token_json)
         
         return T
     
     
-    def Verify_sig(self, pk_o, msg, sigma):
-        msg_int = self.str_to_int(msg)
-        
-        if (pow(msg_int, pk_o, PRIME) == sigma):    #TODO: last time it worked, maybe there is a bug with the keys 
-            return True
-        else:
-            return False
+    def Verify_sig(self, cert_pk_o, msg, sigma):
+        """Verifies the signature"""
+        try:
+            # Hash the message
+            hashed_msg = SHA256.new(msg)
+
+            # Import the provided public key for verification
+            cert_public_key = RSA.import_key(cert_pk_o)
+
+            # Verify the signature
+            pkcs1_15.new(cert_public_key).verify(hashed_msg, sigma)
+                
+            return True  # Signature is valid
+        except (ValueError, TypeError):
+            return False  # Signature verification failed
         
     
     def Attestation(self, root):
@@ -107,7 +131,7 @@ class VERIFIER:
         else:
             raise TypeError("Input must be a string or an integer")
             
-    def int_to_str(i):
+    def int_to_str(self, i):
         length = (i.bit_length() + 7) // 8
         
         return i.to_bytes(length, 'big').decode('utf-8')

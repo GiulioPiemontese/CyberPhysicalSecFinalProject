@@ -1,9 +1,8 @@
-from DeviceClass import DEVICE
 import random
 import hashlib
 import time
 
-PRIME = 23
+PRIME = 7 #23
 
 class AGGREGATOR:
     def __init__(self, provers, owner):
