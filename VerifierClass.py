@@ -28,7 +28,7 @@ class VERIFIER:
         
         msg = f"{self.N_v}{apk}"
         
-        if self.Verify(cert_pk_o, msg, sigma_2):
+        if self.Verify_sig(cert_pk_o, msg, sigma_2):
             
             T = self.Dec(e)
             h_g = T["h_g"]
@@ -39,7 +39,7 @@ class VERIFIER:
             
             msg1 = f"{h_g}{c_l}{v_l}{t_exp}"
             
-            if self.Verify(cert_pk_o, msg1, sigma_1):
+            if self.Verify_sig(cert_pk_o, msg1, sigma_1):
                 self.T_apk = dict(T=T, apk=apk)         # store(T, apk)
         
     
@@ -53,17 +53,18 @@ class VERIFIER:
     def Dec(self, e):
         decrypted_token_int = pow(e, self.sk_v, PRIME)
         
-        token_json = self.int_to_str(decrypted_token_int)
+        token_json = self.int_to_str(decrypted_token_int) #TODO: error saying that 2 args were given but expected 1
         
         T = json.loads(token_json)
         
         return T
     
     
-    def Verify(self, pk_o, msg, sigma):
-        if (pow(msg, pk_o, PRIME) == sigma):
-            return True
+    def Verify_sig(self, pk_o, msg, sigma):
+        msg_int = self.str_to_int(msg)
         
+        if (pow(msg_int, pk_o, PRIME) == sigma):    #TODO: last time it worked, maybe there is a bug with the keys 
+            return True
         else:
             return False
         
@@ -90,20 +91,28 @@ class VERIFIER:
         apk = self.T_apk["apk"]
         
         # Verify returns a list Beta, if the list is empty then is trustworthy 
-        self.Beta = self.Verify(apk, alpha_1, M)
+        self.Beta = self.Verify_beta(apk, alpha_1, M)
         
         if self.Beta == None:
             print("Network trustworthy. End of protocol.")
         else:
             print("Network not trustworthy. Learning identity and configuration of all bad devices. End of protocol.")
             
+
+    def str_to_int(self, s):
+        if isinstance(s, str):  
+            return int.from_bytes(s.encode('utf-8'), 'big')  # Convert string to integer
+        elif isinstance(s, int):
+            return s  # It's already an integer, return as is
+        else:
+            raise TypeError("Input must be a string or an integer")
             
     def int_to_str(i):
         length = (i.bit_length() + 7) // 8
         
         return i.to_bytes(length, 'big').decode('utf-8')
     
-    def Verify(self, apk, alpha_1, M):
+    def Verify_beta(self, apk, alpha_1, M):
         Beta = None
         
         # resta da fare solo questo check

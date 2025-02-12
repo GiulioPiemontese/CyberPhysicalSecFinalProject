@@ -56,7 +56,7 @@ class OWNER:
 
     
   def generate_cert(self, pk):
-    cert = f"PK={pk})"
+    cert = pk
     
     return cert
   
