@@ -1,12 +1,14 @@
 import random
+import base64
 from sympy import isprime
 import math
 import hashlib
-import time
 import json
+import time
 from Crypto.PublicKey import RSA
 from Crypto.Signature import pkcs1_15
 from Crypto.Hash import SHA256
+from Crypto.Cipher import PKCS1_v1_5
 
 ########## OWNER ##########
 
@@ -62,11 +64,14 @@ class OWNER:
       
     self.counters = {i: random.randint(0, 10) for i in range(1, 11)}
 
+
     
   def generate_cert(self, pk):
     cert = self.pk_o.export_key()
     
     return cert
+  
+  
   
   def all_generators(self, p):
     if not isprime(p):
@@ -84,6 +89,8 @@ class OWNER:
         
     return generators
     
+    
+    
   def getFreeCounter(self):
     tuple = random.choice(list(self.counters.items()))  # should be picked the free one
     cl, vl = tuple
@@ -91,12 +98,16 @@ class OWNER:
 
     return cl, vl
   
+  
+  
   def get_nonce(self, nonce):
     self.N_v = nonce
     
     self.no_callenge = random.randint(1, 10)
     
     return self.no_callenge
+  
+  
   
   def tokenReq(self, sigma_v, delta_t, cert_pk_v):
     self.delta_t = delta_t
@@ -115,9 +126,10 @@ class OWNER:
       token = None
       print("Error during token generation. Abort process.")
       return 0
-      
-    # e = self.Enc(token, cert_pk_v) #TODO: in questo momento e contiene il token in plaintext
-    e = token #TODO per il momento, non sapendo come avviene cifratura e decifratura lo lascio così
+    
+    # Token encryption using RSA with pk_v  
+    e = self.Enc(token, cert_pk_v)
+    
     # apk (aggregate public key) is the product of all the pk_i
     self.apk = 1
     for k in self.pk:
@@ -128,6 +140,7 @@ class OWNER:
     sigma_2 = self.Sign(msg)
         
     return e, self.apk, sigma_2, self.generate_cert(self.pk_o)
+  
   
   
   def verify_signature(self, sigma_v, no_challenge, delta_t, cert_pk_v):
@@ -146,22 +159,43 @@ class OWNER:
       pkcs1_15.new(cert_public_key).verify(hashed_msg, sigma_v)
               
       return True  # Signature is valid
+    
     except (ValueError, TypeError):
       return False  # Signature verification failed
             
 
+
   def Enc(self, token, pk_v):
-    token_json = json.dumps(token)
-    
-    token_int = self.str_to_int(token_json)
-    
-    return pow(token_int, pk_v, PRIME)
-  
-        
+    if isinstance(pk_v, RSA.RsaKey):
+        pk_v = pk_v.export_key()
+
+    public_key = RSA.import_key(pk_v)
+    cipher_rsa = PKCS1_v1_5.new(public_key)
+
+    encrypted_token = {}
+    for key, value in token.items():
+        if key == "sigma_1":  # Skip encryption for sigma
+            encrypted_token[key] = value
+            continue
+
+        # Convert lists to JSON format for consistent decryption
+        if isinstance(value, list):
+            value = json.dumps(value)  # Store lists as JSON strings
+
+        value_str = str(value).encode('utf-8')
+
+        encrypted_value = base64.b64encode(cipher_rsa.encrypt(value_str)).decode('utf-8')
+        encrypted_token[key] = encrypted_value
+
+    return encrypted_token
+
+
   def checkPolicy(self, delta_t):
     check = delta_t <= 3600  # Token valid for less than 1 hour
     
     return check
+  
+  
   
   def generate_token(self):
     token = {}
@@ -185,6 +219,8 @@ class OWNER:
     
     return token
   
+  
+  
   def Sign(self, msg):
     # Hash the message
     hashed_msg = SHA256.new(msg)
@@ -193,6 +229,8 @@ class OWNER:
     signature = pkcs1_15.new(self.sk_o).sign(hashed_msg)
         
     return signature            
+    
+
     
   def getGoodConfigs(self):
     configs = ["conf1", "conf2", "conf3"]

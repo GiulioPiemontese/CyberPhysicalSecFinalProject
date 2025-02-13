@@ -1,6 +1,10 @@
 import random
 import hashlib
 import time
+from Crypto.PublicKey import RSA
+from Crypto.Signature import pkcs1_15
+from Crypto.Hash import SHA256
+from Crypto.Cipher import PKCS1_v1_5
 
 PRIME = 7 #23
 
@@ -55,11 +59,11 @@ class AGGREGATOR:
         return pow(M, self.sk, PRIME)# TODO: but aggregators doesn't have any sk to make sign...
         
     def VerifyChallenge(self, Ch):
-        H = self.owner.getGoodConfigs()
+        T = Ch["T"]
+        
+        H = T["H"]
         
         self.h_g = hashlib.sha256("".join(H).encode()).hexdigest()
-        
-        T = Ch["T"]
         
         t_exp = T["t_exp"]
         
@@ -67,29 +71,47 @@ class AGGREGATOR:
         
         sigma_o = T["sigma_1"]
         
-        msg = f"{self.h_g}{c_l}{v_l}{t_exp}"
+        msg = f"{self.h_g}{c_l}{v_l}{t_exp}".encode()
         
-        if (t_exp < time()) or (not(self.CheckCounter(c_l, v_l))):
+        if (t_exp < int(time.time())) or (not(self.CheckCounter(c_l, v_l))):
             print("Aborted.")
             
             return False
         
-        elif not(self.Verify(self.owner.pk_o, msg, sigma_o)) :
+        elif not(self.Verify(self.owner.generate_cert(0), msg, sigma_o)):
             print("Aborted.")
         
             return False
         
         return True
     
+    
+    
     def CheckCounter(self, c_l, v_l):
-        pass    # TODO
+        return True    # TODO
+    
+    
     
     def Verify(self, pk_o, msg, sigma):
-        if pow(msg, pk_o, PRIME) == sigma:
-            return True
+        """Verifies the signature"""
+        try:
+            if isinstance(pk_o, RSA.RsaKey):  
+                cert_public_key = pk_o  # It's already an RSA key, no need to import
+            else:
+                cert_public_key = RSA.import_key(pk_o)
+                        
+            # Hash the message
+            hashed_msg = SHA256.new(msg)
+
+            # Verify the signature
+            pkcs1_15.new(cert_public_key).verify(hashed_msg, sigma)
+                    
+            return True  # Signature is valid
         
-        else:
-            return False
+        except (ValueError, TypeError):
+            return False  # Signature verification failed
+    
+    
     
     def __repr__(self):
         return f"Aggregator"

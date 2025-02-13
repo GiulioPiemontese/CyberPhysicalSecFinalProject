@@ -1,6 +1,8 @@
 import random
 import hashlib
+import base64
 import json
+from Crypto.Cipher import PKCS1_v1_5
 from Crypto.PublicKey import RSA
 from Crypto.Signature import pkcs1_15
 from Crypto.Hash import SHA256
@@ -23,6 +25,7 @@ class VERIFIER:
         self.aggregators = aggregators
         self.owner = owner
         
+        
     
     def tokenReq(self):
         self.N_v = random.randint(1, 10)
@@ -39,8 +42,7 @@ class VERIFIER:
         
         if self.Verify_sig(cert_pk_o, msg, sigma_2):
             
-            # T = self.Dec(e) AL MOMENTO SALTO LA CIFRATURA E DECIFRATURA
-            T = e
+            T = self.Dec(e)
             h_g = hashlib.sha256("".join(T["H"]).encode()).hexdigest()
             c_l = T["c_l"]
             v_l = T["v_l"]
@@ -51,6 +53,7 @@ class VERIFIER:
             
             if self.Verify_sig(cert_pk_o, msg1, sigma_1):
                 self.T_apk = dict(T=T, apk=apk)         # store(T, apk)
+        
         
     
     def Sign(self, no_challenge):
@@ -66,14 +69,35 @@ class VERIFIER:
         return signature
     
     
+    
     def Dec(self, e):
-        decrypted_token_int = pow(e, self.sk_v, PRIME) #TODO a quanto pare questo modo di cifrare e decifrare non funziona
-        
-        token_json = self.int_to_str(decrypted_token_int)
-        
-        T = json.loads(token_json)
-        
-        return T
+        if isinstance(self.sk_v, RSA.RsaKey):
+            private_key = self.sk_v
+        else:
+            private_key = RSA.import_key(self.sk_v)
+
+        cipher_rsa = PKCS1_v1_5.new(private_key)
+
+        decrypted_token = {}
+        for key, encrypted_value in e.items():
+            if key == "sigma_1":
+                decrypted_token[key] = encrypted_value
+                continue
+
+            encrypted_value_bytes = base64.b64decode(encrypted_value)
+            decrypted_value_bytes = cipher_rsa.decrypt(encrypted_value_bytes, None)
+            decrypted_value = decrypted_value_bytes.decode('utf-8')
+
+            # Convert JSON strings back to lists
+            try:
+                decrypted_value = json.loads(decrypted_value)  # Restore list format
+            except json.JSONDecodeError:
+                pass  # If it's not a JSON list, keep it as a string
+
+            decrypted_token[key] = decrypted_value
+
+        return decrypted_token
+    
     
     
     def Verify_sig(self, cert_pk_o, msg, sigma):
@@ -93,6 +117,7 @@ class VERIFIER:
             return False  # Signature verification failed
         
     
+    
     def Attestation(self, root):
         # V uses aggregator[0] as the root for the aggregation process
         A_1 = root
@@ -110,7 +135,7 @@ class VERIFIER:
         c_l = T["c_l"]
         v_l = T["v_l"]
         
-        M = f"{h_g}{N}{c_l}{v_l}"
+        M = f"{h_g}{N}{c_l}{v_l}".encode()
         
         apk = self.T_apk["apk"]
         
@@ -123,18 +148,6 @@ class VERIFIER:
             print("Network not trustworthy. Learning identity and configuration of all bad devices. End of protocol.")
             
 
-    def str_to_int(self, s):
-        if isinstance(s, str):  
-            return int.from_bytes(s.encode('utf-8'), 'big')  # Convert string to integer
-        elif isinstance(s, int):
-            return s  # It's already an integer, return as is
-        else:
-            raise TypeError("Input must be a string or an integer")
-            
-    def int_to_str(self, i):
-        length = (i.bit_length() + 7) // 8
-        
-        return i.to_bytes(length, 'big').decode('utf-8')
     
     def Verify_beta(self, apk, alpha_1, M):
         Beta = None
@@ -142,9 +155,4 @@ class VERIFIER:
         # resta da fare solo questo check
             
         return Beta
-        
-        
-        
-        
-        
         
