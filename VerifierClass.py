@@ -7,7 +7,7 @@ from Crypto.PublicKey import RSA
 from Crypto.Signature import pkcs1_15
 from Crypto.Hash import SHA256
 
-PRIME = 7 #23
+PRIME = 23
 
 class VERIFIER:
     def __init__(self, owner, aggregators):
@@ -127,7 +127,7 @@ class VERIFIER:
         
         Ch = {"N": N, "T": T}
         
-        alpha_1 = A_1.send_att_req(Ch)  # alpha_1 will be the aggregation of alla alphas returned
+        alpha_1 = A_1.send_att_req(Ch)  # alpha_1 will be the aggregation of all alphas returned
         
         h = self.owner.getGoodConfigs()
         h_g = hashlib.sha256("".join(h).encode()).hexdigest()
@@ -135,7 +135,7 @@ class VERIFIER:
         c_l = T["c_l"]
         v_l = T["v_l"]
         
-        M = f"{h_g}{N}{c_l}{v_l}".encode()
+        M = f"{h_g}{N}{c_l}{v_l}".encode()      # TODO: controllare h come viene fatto
         
         apk = self.T_apk["apk"]
         
@@ -146,11 +146,13 @@ class VERIFIER:
             print("Network trustworthy. End of protocol.")
         else:
             print("Network not trustworthy. Learning identity and configuration of all bad devices. End of protocol.")
+            for conf in self.Beta:
+                print(conf, "\n")
             
 
     
     def Verify_beta(self, apk, alpha_1, M):
-        Beta = None
+        Beta = [] # start from empty list
         
         # resta da fare solo questo check
             

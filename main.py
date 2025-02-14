@@ -39,35 +39,40 @@ def print_tree(aggregator, level=0):
             print(f"{indent}  {child}")  # If it's a PROVER, just print it (no children)
 
 
+def start_SANA(n, a):
+            
+    provers = []
+
+    for i in range(n):
+        provers.append(PROVER(i))
+        
+    owner = OWNER(provers)
+    
+    aggregators = []
+
+    for agg in range(a):
+        aggregators.append(AGGREGATOR(agg, provers, owner))
+
+    build_hierarchy(aggregators, provers, fan_out=2)
+
+    # Print out the tree hierarchy of aggregators   TODO: sistemare la generazione dell'albero perchè viene sbilanciato, 
+    # TODO: vedere la stampa e fare attenzione a come vengono dati i prover
+    print("\nHierarchy Tree:")
+    print_tree(aggregators[0])  # Start from the root aggregator (aggregators[0])
+
+    verifier = VERIFIER(owner, aggregators)
+    verifier.tokenReq()
+
+    verifier.Attestation(aggregators[0])
+
+
+
 
 ########## MAIN ##########
 
 if __name__ == "__main__":
 
-  a = 7   # a is the total number of aggregators of the network
-  n = 5   # n is the total number of providers of the network
-  # there is only one verifier and owner
-          
-  provers = []
-
-  for i in range(n):
-    provers.append(PROVER(i))
+    n_provers = 5
+    n_aggregators = 7
     
-  owner = OWNER(provers)
-  
-  aggregators = []
-
-  for agg in range(a):
-    aggregators.append(AGGREGATOR(provers, owner))
-
-  build_hierarchy(aggregators, provers, fan_out=2)
-
-  # Print out the tree hierarchy of aggregators
-  print("\nHierarchy Tree:")
-  print_tree(aggregators[0])  # Start from the root aggregator (aggregators[0])
-
-  verifier = VERIFIER(owner, aggregators)
-  verifier.tokenReq()
-
-  verifier.Attestation(aggregators[0])
-
+    start_SANA(n_provers, n_aggregators)

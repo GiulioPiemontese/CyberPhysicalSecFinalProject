@@ -12,18 +12,10 @@ from Crypto.Cipher import PKCS1_v1_5
 
 ########## OWNER ##########
 
-PRIME = 7 #23
+PRIME = 23
 
 class OWNER:
   def __init__(self, provers):
-    generators = self.all_generators(PRIME)
-    
-    self.g1 = random.choice(generators)
-    self.g2 = random.choice(generators)
-    self.g3 = random.choice(generators)
-    
-    print(self.g1, self.g2, self.g3)
-
     # Generate RSA Key Pair (in variables)
     key = RSA.generate(2048)
     private_key = key.export_key()
@@ -33,35 +25,32 @@ class OWNER:
     self.sk_o = RSA.import_key(private_key)
     self.pk_o = RSA.import_key(public_key)
     
-    # Generation of key pairs (sk_i, pk_i) for each prover
-    sk = [] # sk are just integers of group mod p
-    
-    for p in provers:
-      sk.append(random.randint(1, PRIME - 1))
-      
-    print(sk)
-    
-    
-    self.pk = []
-    
-    for i in range(len(provers)):
-      self.pk.append(pow(self.g2, sk[i], PRIME))
-      
-    print(self.pk)
-    
-    key_pairs = []
-    
-    for i in range(len(provers)):
-      key_pairs.append((sk[i], self.pk[i]))
-    
-    certificates = []
-    
-    for k in self.pk:
-      certificates.append(k)
-      
+    # Find valid generators for the given prime
+    generators = self.all_generators(PRIME)
+
+        # Randomly select generators for G1, G2, and GT
+    self.g1 = random.choice(generators)
+    self.g2 = random.choice(generators)
+    self.g3 = pow(self.g1, self.g2, PRIME)  # Simulated bilinear pairing
+        
+    print(f"Generators: g1={self.g1}, g2={self.g2}, g3={self.g3}")
+
+    # Generate secret and public keys for provers
+    self.sk = [random.randint(1, PRIME - 1) for _ in provers]  # Secret keys (random ints in Zp)
+    self.pk = [pow(self.g2, sk_i, PRIME) for sk_i in self.sk]  # Public keys
+
+    print("Secret Keys:", self.sk)
+    print("Public Keys:", self.pk)
+
+    # Create key pairs (sk_i, pk_i) and assign certificates
+    key_pairs = list(zip(self.sk, self.pk))
+    certificates = self.pk[:]  # Public key itself acts as a certificate
+
+    # Distribute key pairs and certificates to provers
     for p, k, c in zip(provers, key_pairs, certificates):
-      p.receive_trust_env(k, c)
-      
+      p.receive_trust_env(k, c, self)
+
+      # Generate random attestation counters
     self.counters = {i: random.randint(0, 10) for i in range(1, 11)}
 
 
@@ -76,19 +65,49 @@ class OWNER:
   def all_generators(self, p):
     if not isprime(p):
       raise ValueError("p must be a prime number.")
-        
-    # Set of all elements coprime with p
+          
     required_set = {num for num in range(1, p) if math.gcd(num, p) == 1}
     generators = []
-        
+          
     for g in range(1, p):
-      # Generate the set of powers of g modulo p
+      # Generate all powers of g modulo p
       generated = {pow(g, power, p) for power in range(1, p)}
       if generated == required_set:
         generators.append(g)
-        
+          
     return generators
-    
+  
+  def pairing(self, x, y):
+    """
+        Computes the bilinear pairing: e(x, y) = g3^(x*y) mod PRIME.
+    """
+    return pow(self.g3, x * y, PRIME)
+
+  def exponentiate(self, base, exponent):
+    """
+        Computes modular exponentiation: base^exponent mod PRIME.
+    """
+    return pow(base, exponent, PRIME)
+
+  def isomorphism_G2_to_G1(self, element_G2):
+    """
+        Implements the isomorphism ψ: G2 → G1 such that ψ(g2) = g1.
+        We use a simple modular reduction as an example.
+    """
+    return element_G2 % PRIME
+
+  def test_pairing_property(self):
+    """
+        Verifies the bilinear pairing property:
+        e(g1^x, g2^y) == (e(g1, g2))^(xy).
+    """
+    x = random.randint(1, PRIME - 1)
+    y = random.randint(1, PRIME - 1)
+
+    left = self.pairing(self.exponentiate(self.g1, x), self.exponentiate(self.g2, y))
+    right = self.exponentiate(self.g3, x * y)  # g3^(xy) mod p
+
+    return left == right
     
     
   def getFreeCounter(self):
@@ -228,7 +247,7 @@ class OWNER:
     # Sign the message
     signature = pkcs1_15.new(self.sk_o).sign(hashed_msg)
         
-    return signature            
+    return signature
     
 
     
