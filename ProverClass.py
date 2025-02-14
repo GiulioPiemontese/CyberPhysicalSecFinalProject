@@ -5,23 +5,20 @@ from Crypto.PublicKey import RSA
 from Crypto.Signature import pkcs1_15
 from Crypto.Hash import SHA256
 
-PRIME = 23
+PRIME = 97
 
 class PROVER:
     def __init__(self, id):
+        self.children = []
         self.id = id
         self.sk = None
         self.pk = None
-        self.cert = None
-        self.owner = None
-        self.M = "Default MSG"
-        
+        self.owner = None        
     
         
-    def receive_trust_env(self, key_pair, cert, owner):
-        self.sk = key_pair[0]
-        self.pk = key_pair[1]
-        self.cert = cert
+    def receive_trust_env(self, sk, pk, owner):
+        self.sk = sk
+        self.pk = pk
         self.owner = owner
         
     
@@ -55,40 +52,32 @@ class PROVER:
         h = self.getSoftConf()
     
         if h in H:
-            h = hashlib.sha256("".join(h).encode()).hexdigest() # h <- h_g
+            h = hashlib.sha256("".join(H).encode()).hexdigest() # h <- h_g
         
-        # msg1 = h|N|c_l|v_l
+        # msg = h|N|c_l|v_l
         msg = f"{h}{N}{c_l}{v_l}".encode()
         
-        # Sign both messages using OAS: h|N|c_l|v_l and M
-        msg1 = self.Sign(msg)
-        msg2 = self.Sign(self.M.encode())        
-        
-        # alpha = Sign(sk; h|N|c_l|v_l, M) TODO: but i think that they are not concatenated but are returned as couple of msg
-        alpha = f"{msg1}{msg2}".encode()
-        
+        # Sign using OAS: h|N|c_l|v_l
+        alpha = self.Sign(msg)
+                
         return alpha
     
     
-    def hash_to_G1(self, msg):
-        """
-        Hashes the message and maps it into the G1 group using modular reduction.
-        """
-        h = int(hashlib.sha256(msg).hexdigest(), 16)  # Convert hash to an integer
-        return h % PRIME  # Reduce it into the finite field (G1)
-
     def Sign(self, msg):
-        """
-        Signs the message using OAS scheme
-        """
-        H_m = self.hash_to_G1(msg)  # Convert message to element in G1
-        sign = pow(H_m, self.sk, PRIME)  # Compute signature in G1
-        return sign
-    
+        # Hash the message
+        hashed_msg = SHA256.new(msg)
+
+        private_key = RSA.import_key(self.sk)
+
+        # Sign the message
+        signature = pkcs1_15.new(private_key).sign(hashed_msg)
+            
+        return signature
+        
     
     
     def getSoftConf(self):
-        conf = "conf1"
+        conf = "conf5"
         
         return conf
     
@@ -155,5 +144,5 @@ class PROVER:
     
     
     def __str__(self):
-        return f"Prover{self.id}:ID={self.id}, SK={self.sk}, PK={self.pk}"
+        return f"Prover{self.id}:ID={self.id}"
     

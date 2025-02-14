@@ -5,7 +5,7 @@ from Crypto.PublicKey import RSA
 from Crypto.Signature import pkcs1_15
 from Crypto.Hash import SHA256
 
-PRIME = 23
+PRIME = 97
 
 class AGGREGATOR:
     def __init__(self, id, provers, owner):
@@ -15,16 +15,6 @@ class AGGREGATOR:
         self.children = []
         self.alphas = []
         
-        # Generate RSA Key Pair (in variables)
-        key = RSA.generate(2048)
-        private_key = key.export_key()
-        public_key = key.publickey().export_key()
-
-        # Import keys directly from variables
-        self.sk_a = RSA.import_key(private_key)
-        self.pk_a = RSA.import_key(public_key)
-
-    
     
     
     def set_children(self, children):
@@ -48,53 +38,36 @@ class AGGREGATOR:
     '''Method that forward the req from root to the children'''    
     def forward(self, Ch):
         self.alphas = []
-        
-        # forwarding the challenger to the neighbour
+
+        # Forward the challenge to children and collect their responses
         for child in self.children:
-            alpha_child = child.forward(Ch)
-            self.alphas.append(alpha_child)
-            
-        N = random.randint(1, 10)
-            
-        T = Ch["T"]
-            
-        c_l = T["c_l"]
-        v_l = T["v_l"]
-        
-        H = T["H"]
-        h_g = hashlib.sha256("".join(H).encode()).hexdigest()   # TODO: don't know if it should be the getSoftConf like provers, for now lets do this
-            
-        # M <- h_g|N|c_l|v_l
-        M = f"{h_g}{N}{c_l}{v_l}".encode()
-            
-        # alpha_1 = self.Sign(M) TODO: construct the right Sign method for aggregators
-        alpha_1 = M
-        
-        alpha_1 = self.aggregateResponse(alpha_1, self.alphas, M)
-            
+            alpha_child = child.forward(Ch)  # Recursively call forward()
+
+            # Only append if the response is from a prover (no further children)
+            if not child.children:
+                self.alphas.append({"Device": child, "alpha": alpha_child})
+
+            # If the response comes from an aggregator, merge it directly (avoid nesting)
+            elif isinstance(alpha_child, list):  
+                self.alphas.extend(alpha_child)
+
+        # Aggregate responses received only from provers
+        alpha_1 = self.aggregateResponse(self.alphas)
+
         return alpha_1
-    
-    
-    ''' 
-    On input two aggregate signatures alpha1 , alpha2 and the default message M , the signature
-    aggregation algorithm AggSig outputs a new aggregate signature
-    alpha that includes all signatures in alpha1 and alpha2 
-    '''
-    def aggregateResponse(self, alpha_1, alphas, M):        
-        # alpha_1 <- AggSign(alpha_1, alpha_i, M)
-        aggregated_alpha = ""
+
+
+    def aggregateResponse(self, alphas):
+        aggregated_alpha = []
+
         for alpha in alphas:
-            aggregated_alpha += f"{alpha}" # lets consider it as concatenation at the moment
-        
-        aggregated_alpha += alpha_1 # TODO: alpha_1 is not a string, correct it
-        
-        return aggregated_alpha
-        
-    
-    
-    def Sign(self, M):
-        return pow(M, self.sk, PRIME)# TODO: but aggregators doesn't have any sk to make sign...
-    
+            if alpha:  # Ensure valid entries
+                aggregated_alpha.append({"Device": alpha["Device"], "alpha": alpha["alpha"]})
+
+        if aggregated_alpha:
+            print(f"Aggregation by {self}: ", aggregated_alpha)
+
+        return aggregated_alpha if aggregated_alpha else None
     
     
     def VerifyChallenge(self, Ch):

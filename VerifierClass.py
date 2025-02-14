@@ -7,12 +7,12 @@ from Crypto.PublicKey import RSA
 from Crypto.Signature import pkcs1_15
 from Crypto.Hash import SHA256
 
-PRIME = 23
+PRIME = 97
 
 class VERIFIER:
     def __init__(self, owner, aggregators):
         # Generate RSA Key Pair (in variables)
-        key = RSA.generate(2048)
+        key = RSA.generate(1024)
         private_key = key.export_key()
         public_key = key.publickey().export_key()
 
@@ -129,20 +129,20 @@ class VERIFIER:
         
         alpha_1 = A_1.send_att_req(Ch)  # alpha_1 will be the aggregation of all alphas returned
         
-        h = self.owner.getGoodConfigs()
-        h_g = hashlib.sha256("".join(h).encode()).hexdigest()
+        H = self.owner.getGoodConfigs()
+        h_g = hashlib.sha256("".join(H).encode()).hexdigest()
         
         c_l = T["c_l"]
         v_l = T["v_l"]
         
-        M = f"{h_g}{N}{c_l}{v_l}".encode()      # TODO: controllare h come viene fatto
+        M = f"{h_g}{N}{c_l}{v_l}".encode()
         
-        apk = self.T_apk["apk"]
+        apk = self.owner.simplified_apk
         
         # Verify returns a list Beta, if the list is empty then is trustworthy 
         self.Beta = self.Verify_beta(apk, alpha_1, M)
         
-        if self.Beta == None:
+        if self.Beta == []:
             print("Network trustworthy. End of protocol.")
         else:
             print("Network not trustworthy. Learning identity and configuration of all bad devices. End of protocol.")
@@ -152,9 +152,36 @@ class VERIFIER:
 
     
     def Verify_beta(self, apk, alpha_1, M):
-        Beta = [] # start from empty list
-        
-        # resta da fare solo questo check
+        Beta = []  # Start with an empty list for compromised devices
+
+        # Hash the message M
+        M_hashed = SHA256.new(M)
+
+        # Iterate through all provers in apk and verify their signatures
+        for prover, data in apk.items():
+            pk_bytes = data["pk"]  # Get the public key (stored as bytes)
             
+            # Convert from bytes to an RSA key object
+            public_key = RSA.import_key(pk_bytes)
+
+            # Find the corresponding alpha (signature) in alpha_1 list
+            received_alpha = None
+            for entry in alpha_1:
+                if entry["Device"] == prover:
+                    received_alpha = entry["alpha"]
+                    break  # Stop searching once we find the matching prover
+
+            if received_alpha is None:
+                Beta.append({"Device": prover, "Issue": "Missing Signature"})
+                continue  # Skip to next prover
+            
+            try:
+                pkcs1_15.new(public_key).verify(M_hashed, received_alpha)
+            except (ValueError, TypeError):
+                # Signature verification failed
+                Beta.append({"Device": prover, "Issue": "Signature Mismatch"})
+
         return Beta
-        
+    
+    
+    

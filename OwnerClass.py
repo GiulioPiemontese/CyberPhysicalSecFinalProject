@@ -12,12 +12,12 @@ from Crypto.Cipher import PKCS1_v1_5
 
 ########## OWNER ##########
 
-PRIME = 23
+PRIME = 97
 
 class OWNER:
   def __init__(self, provers):
     # Generate RSA Key Pair (in variables)
-    key = RSA.generate(2048)
+    key = RSA.generate(1024)
     private_key = key.export_key()
     public_key = key.publickey().export_key()
 
@@ -42,15 +42,20 @@ class OWNER:
     print("Secret Keys:", self.sk)
     print("Public Keys:", self.pk)
 
-    # Create key pairs (sk_i, pk_i) and assign certificates
-    key_pairs = list(zip(self.sk, self.pk))
-    certificates = self.pk[:]  # Public key itself acts as a certificate
+    self.simplified_apk = {}
 
-    # Distribute key pairs and certificates to provers
-    for p, k, c in zip(provers, key_pairs, certificates):
-      p.receive_trust_env(k, c, self)
+    for p in provers:
+      rsa_key = RSA.generate(1024)
+      sk_p = rsa_key.export_key()  # Private key
+      pk_p = rsa_key.publickey().export_key()  # Public key
 
+      # Distribute key pairs to provers
+      p.receive_trust_env(sk_p, pk_p, self)
+
+      # Store in simplified_apk (public key only)
+      self.simplified_apk[p] = {"pk": pk_p}
       # Generate random attestation counters
+    
     self.counters = {i: random.randint(0, 10) for i in range(1, 11)}
 
 
