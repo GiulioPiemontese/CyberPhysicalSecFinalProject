@@ -64,8 +64,8 @@ class AGGREGATOR:
             if alpha:  # Ensure valid entries
                 aggregated_alpha.append({"Device": alpha["Device"], "alpha": alpha["alpha"]})
 
-        if aggregated_alpha:
-            print(f"Aggregation by {self}: ", aggregated_alpha)
+        #if aggregated_alpha:
+        #    print(f"Aggregation by {self}: ", aggregated_alpha)
 
         return aggregated_alpha if aggregated_alpha else None
     

@@ -77,7 +77,7 @@ class PROVER:
     
     
     def getSoftConf(self):
-        conf = "conf5"
+        conf = "conf1"
         
         return conf
     
